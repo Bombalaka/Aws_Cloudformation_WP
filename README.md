@@ -154,5 +154,5 @@ aws ec2 describe-instances --filters "Name=tag:Name,Values=MyAutoscalingGroup-In
 4. **Learn about RDS backups** and point-in-time recovery
 5. **Study security best practices** for production deployments
 
-Remember: This is a learning project! In production, you'd want additional security, monitoring, and backup strategies.
+
 

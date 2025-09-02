@@ -4,3 +4,440 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   This template creates an EC2 instance, autoscaling group, load balancer, security group, 
   launch template, a target group, and EFS file system. Includes automated installation of WordPress.
+
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: "My VPC ID, default vpc because I created it already so we don't need to create a new one"
+    Default: #your vpc id
+  Subnet1:
+    Type: AWS::EC2::Subnet::Id
+    Description: "My Subnet ID 1"
+    Default: #your subnet id
+  Subnet2:
+    Type: AWS::EC2::Subnet::Id
+    Description: "My Subnet ID 2"
+    Default: #your subnet id
+  Subnet3:
+    Type: AWS::EC2::Subnet::Id
+    Description: "My Subnet ID 3"
+    Default: #your subnet id
+  ImageId:
+    Type: AWS::EC2::Image::Id
+    Description: "My Image ID, Amazon Linux 2023"
+    Default: #your image id
+  InstanceType:
+    Type: String
+    Description: "My Instance Type, t3.micro"
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t3.small
+      - t3.medium
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: "Get a key pair"
+    Default: # Replace with your key pair name that you created in aws or aws cli   
+  MasterUserName:
+    Type: String
+    Description: "Database master username"
+    Default: #your master username
+  MasterUserPassword:
+    Type: String
+    Description: "Database master password"
+    NoEcho: true
+    Default: #your master password
+  DBInstanceClass:
+    Type: String
+    Description: "Database instance class"
+    Default: db.t4g.micro
+    AllowedValues:
+      - db.t4g.micro
+      - db.t4g.small
+      - db.t4g.medium
+  DBEngine:
+    Type: String
+    Description: "Database engine"
+    Default: mariadb
+    AllowedValues:
+      - mariadb
+      - mysql
+      - postgres
+
+Resources:
+
+  # Security Group for ASG
+  ASGSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow SSH and HTTP"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0 # allow ssh from anywhere 
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0 # allow http from anywhere 
+  
+  # Security Group for Load Balancer
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow HTTP"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0 # allow http from anywhere 
+
+  # Security Group for RDS(database)
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Database access from ASG and Deploy only"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref ASGSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref DeploySecurityGroup
+  
+  # Security Group for Deploy instance WordPress
+  DeploySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow SSH, HTTP and HTTPS traffic"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+  
+  # Security Group for EFS
+  EFSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow NFS traffic"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          SourceSecurityGroupId: !Ref ASGSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          SourceSecurityGroupId: !Ref DeploySecurityGroup
+  
+  # EFS FileSystem
+  EFSFileSystem:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      Encrypted: true
+      FileSystemTags:
+        - Key: Name
+          Value: "MyEFSFileSystem"
+  
+  # Mount Target for EFS
+  EFSMountTarget1:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref EFSFileSystem
+      SubnetId: !Ref Subnet1
+      SecurityGroups:
+        - !Ref EFSSecurityGroup
+  EFSMountTarget2:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref EFSFileSystem
+      SubnetId: !Ref Subnet2
+      SecurityGroups:
+        - !Ref EFSSecurityGroup
+  EFSMountTarget3:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref EFSFileSystem
+      SubnetId: !Ref Subnet3
+      SecurityGroups:
+        - !Ref EFSSecurityGroup
+  
+   #Database RDS
+  
+  #Database Instance
+  DatabaseInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: "MyWordPressDatabase"
+      DBName: "wordpressdb"
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: !Ref DBEngine
+      MasterUsername: !Ref MasterUserName
+      MasterUserPassword: !Ref MasterUserPassword
+      VPCSecurityGroups:
+        - !Ref DatabaseSecurityGroup
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      AllocatedStorage: 20
+      MaxAllocatedStorage: 100
+      PubliclyAccessible: true
+      MultiAZ: false
+  
+  # Database subnet group
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: "Database subnet group"
+      SubnetIds:
+        - !Ref Subnet1
+        - !Ref Subnet2
+        - !Ref Subnet3
+
+  # Target Group for Load Balancer
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: "MyTargetGroup"
+      Protocol: HTTP
+      Port: 80
+      VpcId: !Ref VpcId
+      TargetType: instance
+      HealthCheckPath: /
+      HealthCheckIntervalSeconds: 30
+  
+  # Load Balancer listener
+  ApplicationLoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+  
+  # Application Load Balancer
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: "MyLoadBalancer"
+      Scheme: internet-facing
+      Type: application
+      Subnets:
+        - !Ref Subnet1
+        - !Ref Subnet2
+        - !Ref Subnet3
+      SecurityGroups:
+        - !Ref LoadBalancerSecurityGroup
+      Tags:
+        - Key: Name
+          Value: "MyLoadBalancer"
+
+  # EC2 Instance for deploy LAMP(Apache, php, mysql, linux) and configuration, it will delete after successful setup, install wordpress and configure database
+  DeployWordPressInstance:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - EFSMountTarget1
+      - EFSMountTarget2
+      - EFSMountTarget3
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      ImageId: !Ref ImageId
+      SecurityGroupIds:
+        - !Ref DeploySecurityGroup
+      SubnetId: !Ref Subnet1
+      InstanceInitiatedShutdownBehavior: terminate
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          echo "Starting setup..."
+
+          #GET RDS endpoint
+          RDS_ENDPOINT='${DatabaseInstance.Endpoint.Address}'
+          DB_NAME="wordpressdb"
+          DB_USER="${MasterUserName}"
+          DB_PASSWORD="${MasterUserPassword}"
+
+          echo "RDS Endpoint: $RDS_ENDPOINT"
+
+          #update and install mariadb, php and apache
+          dnf update -y
+          dnf install -y amazon-efs-utils httpd php php-fpm \
+            php-mysqlnd php-mysqli php-json php-mbstring php-xml php-gd php-opcache \
+            wget tar rsync mariadb105
+
+          # Make Apache execute PHP via php-fpm (no heredoc to avoid YAML indent issues)
+          printf '%s\n' '<FilesMatch \.php$>' '    SetHandler "proxy:unix:/run/php-fpm/www.sock|fcgi://localhost/"' '</FilesMatch>' \
+            > /etc/httpd/conf.d/php-fpm.conf
+
+          #Start and enable services
+          systemctl enable httpd php-fpm
+          systemctl start httpd php-fpm
+          
+
+          #configure user and permissions group access
+          usermod -a -G apache ec2-user
+          chown -R ec2-user:apache /var/www
+          chmod -R 2775 /var/www
+          find /var/www -type d -exec chmod 2775 {} \;
+          find /var/www -type f -exec chmod 0664 {} \;
+
+
+          #mount efs
+          mkdir -p /mnt/efs
+          grep -q "${EFSFileSystem}:/ /mnt/efs efs " /etc/fstab || echo "${EFSFileSystem}:/ /mnt/efs efs tls,_netdev 0 0" >> /etc/fstab
+          for i in {1..10}; do
+            mount -a && break
+            echo "EFS mount retry $i/10"; sleep 6
+          done
+
+          # Use EFS as webroot
+          rm -rf /var/www/html
+          ln -s /mnt/efs /var/www/html
+
+          # WordPress core (only if missing)
+          if [ ! -f /mnt/efs/wp-load.php ]; then
+            cd /tmp
+            wget -q https://wordpress.org/latest.tar.gz
+            tar -xzf latest.tar.gz
+            rsync -a wordpress/ /mnt/efs/
+          fi
+
+          # Ownership / perms for web server
+          chown -R apache:apache /mnt/efs
+          find /mnt/efs -type d -exec chmod 755 {} \;
+          find /mnt/efs -type f -exec chmod 644 {} \;
+
+          # Ensure DB exists (installer creates tables later)
+          MYSQL=$(command -v mysql || command -v mariadb)
+          for i in {1..60}; do
+            $MYSQL -h "$RDS_ENDPOINT" -u "$DB_USER" -p"$DB_PASSWORD" -e "SELECT 1;" && break || sleep 5
+          done
+          $MYSQL -h "$RDS_ENDPOINT" -u "$DB_USER" -p"$DB_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\`;"
+
+          systemctl restart httpd php-fpm
+
+          echo "DeployInstance complete."
+          # Optional: shut down later to save $
+          shutdown -h +20
+
+  # Launch Template for ASG (mount EFS, run Apache+PHP)
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    # Wait for ALL EFS mount targets before creating launch template
+    DependsOn:
+      - EFSMountTarget1
+      - EFSMountTarget2
+      - EFSMountTarget3
+      - DeployWordPressInstance
+    Properties:
+      LaunchTemplateName: "MyLaunchTemplate"
+      LaunchTemplateData:
+        ImageId: !Ref ImageId
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyName
+        SecurityGroupIds:
+          - !Ref ASGSecurityGroup
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash -xe
+            echo "Starting setup..."
+
+            # Update and install
+            dnf upgrade -y
+            dnf install -y amazon-efs-utils httpd php php-fpm \
+              php-mysqlnd php-mysqli php-json php-mbstring php-xml php-gd php-opcache \
+              wget rsync mariadb105
+            
+            # PHP handler (no heredoc)
+            printf '%s\n' '<FilesMatch \.php$>' '    SetHandler "proxy:unix:/run/php-fpm/www.sock|fcgi://localhost/"' '</FilesMatch>' \
+              > /etc/httpd/conf.d/php-fpm.conf
+
+            systemctl enable httpd php-fpm
+            systemctl restart httpd php-fpm
+
+             # EFS mount (persist + retry)
+            mkdir -p /mnt/efs
+            grep -q "${EFSFileSystem}:/ /mnt/efs efs " /etc/fstab || echo "${EFSFileSystem}:/ /mnt/efs efs tls,_netdev 0 0" >> /etc/fstab
+            for i in {1..10}; do
+              mount -a && break
+              echo "EFS mount retry $i/10"; sleep 6
+            done
+
+            # Use EFS as webroot
+            rm -rf /var/www/html
+            ln -s /mnt/efs /var/www/html
+
+            chown -R apache:apache /var/www/html /mnt/efs
+            systemctl restart httpd php-fpm
+
+            echo "ASG instance ready."
+
+  # Auto Scaling Group
+  AutoscalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    # Ensure EFS is fully ready before launching instances
+    DependsOn:
+      - EFSMountTarget1
+      - EFSMountTarget2
+      - EFSMountTarget3
+    Properties:
+      AutoScalingGroupName: "MyAutoscalingGroup"
+      MinSize: 2
+      MaxSize: 4
+      DesiredCapacity: 2
+      VPCZoneIdentifier:
+        - !Ref Subnet1
+        - !Ref Subnet2
+        - !Ref Subnet3
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      TargetGroupARNs:
+        - !Ref TargetGroup # this connects between ASG and Target Group
+      Tags:
+        - Key: Name
+          Value: "MyAutoscalingGroup-Instance"
+          PropagateAtLaunch: true
+
+  # Scaling Policy
+  ScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AutoscalingGroup
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 50.0
+  
+  
+  
+  # Outputs
+Outputs:
+  LoadBalancerDNS:
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+    Description: "Load Balancer DNS"
+
+  WebsiteURL:
+    Value: !Sub "http://${ApplicationLoadBalancer.DNSName}"
+    Description: "Website URL - should show custom page if EFS mounted correctly"
+
+  DatabaseEndpoint:
+    Value: !GetAtt DatabaseInstance.Endpoint.Address
+    Description: "Database Endpoint"
+
+ 

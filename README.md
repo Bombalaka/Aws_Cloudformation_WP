@@ -1,4 +1,4 @@
-# WordPress Cloud Architecture on AWS
+# WordPress on AWS
 
 ## 🎯 What This Project Does
 

@@ -96,36 +96,6 @@ After deployment, you'll get a Load Balancer DNS name. Visit that URL to see you
 aws cloudformation delete-stack --stack-name MyWordPressSite
 ```
 
-**Estimated costs** (varies by region):
-- 2x t3.micro instances: ~$15/month
-- Application Load Balancer: ~$16/month  
-- RDS db.t4g.micro: ~$13/month
-- EFS storage: ~$3/month + usage
-- **Total**: ~$47/month + data transfer
-
-## 🎓 Learning Points for Beginners
-
-### Why Use CloudFormation?
-- **Infrastructure as Code**: Your entire setup is defined in a text file
-- **Reproducible**: You can create the same setup anywhere, anytime
-- **Version Control**: Track changes to your infrastructure like code
-- **Automation**: No manual clicking in AWS console
-
-### Why This Architecture?
-- **Scalability**: Automatically handles traffic spikes
-- **High Availability**: If one server fails, others keep running
-- **Shared Storage**: All servers see the same files
-- **Managed Database**: AWS handles backups and maintenance
-- **Security**: Multiple layers of network protection
-
-### Key AWS Concepts You're Learning:
-- **VPC**: Your private network in the cloud
-- **Subnets**: Smaller networks within your VPC
-- **Security Groups**: Firewall rules for your resources
-- **Auto Scaling**: Automatic server management
-- **Load Balancing**: Traffic distribution
-- **Managed Services**: AWS handles the complex stuff
-
 ## 🛠️ Troubleshooting
 
 ### Common Issues:

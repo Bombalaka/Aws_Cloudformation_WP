@@ -1,1 +1,3 @@
 .env 
+MyWPKey.pem
+*.pem

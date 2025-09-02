@@ -1,0 +1,6 @@
+--- 
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: >
+  This template creates an EC2 instance, autoscaling group, load balancer, security group, 
+  launch template, a target group, and EFS file system. Includes automated installation of WordPress.
